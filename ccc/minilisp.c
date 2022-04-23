@@ -566,17 +566,17 @@ static Obj *prim_eq(void *root, Obj **env, Obj **list) {
 static void add_primitive(void *root, Obj **env, char *name, Primitive *fn) {
     DEFINE2(sym, prim);
     *sym = intern(root, name);
-    *prim = make_primitive(root, fn);
+    *prim = make_primitive(root, fn); // 創建 name 符號
     add_variable(root, env, sym, prim); // 新增基本函數
 }
 
 static void define_constants(void *root, Obj **env) {
     DEFINE1(sym);
-    *sym = intern(root, "t");
+    *sym = intern(root, "t"); // 創建 t 符號
     add_variable(root, env, sym, &True); // 新增常數 t (True)
 }
 
-static void define_primitives(void *root, Obj **env) {
+static void define_primitives(void *root, Obj **env) { // 創建所有預設的 symbol 函數
     add_primitive(root, env, "quote", prim_quote);
     add_primitive(root, env, "cons", prim_cons);
     add_primitive(root, env, "car", prim_car);
@@ -604,7 +604,7 @@ static void define_primitives(void *root, Obj **env) {
 //======================================================================
 
 // Returns true if the environment variable is defined and not the empty string.
-static bool getEnvFlag(char *name) {
+static bool getEnvFlag(char *name) { // 判斷環境變數是否存在？
     char *val = getenv(name);
     return val && val[0];
 }

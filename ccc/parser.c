@@ -78,7 +78,7 @@ static Obj *intern(void *root, char *name) { // 如果 name 變數存在，就�
 // Reader marcro ' (single quote). It reads an expression and returns (quote <expr>).
 static Obj *read_quote(void *root) { // 讀取 'expr 後創建 (quote expr) list
     DEFINE2(sym, tmp);
-    *sym = intern(root, "quote");
+    *sym = intern(root, "quote"); // 取得 quote 符號
     *tmp = read_expr(root);
     *tmp = cons(root, tmp, &Nil); // tmp = (expr nil) 
     *tmp = cons(root, sym, tmp);  // tmp = (quote (expr nil))
@@ -101,7 +101,7 @@ static Obj *read_symbol(void *root, char c) { // 讀入一個符號
         buf[len++] = getchar();
     }
     buf[len] = '\0';
-    return intern(root, buf);
+    return intern(root, buf); // 取得或創建名稱維 buf 的 symbol
 }
 
 static Obj *read_expr(void *root) { // 讀取一個 expr = (...)
@@ -127,6 +127,7 @@ static Obj *read_expr(void *root) { // 讀取一個 expr = (...)
             return make_int(root, read_number(c - '0'));
         if (c == '-' && isdigit(peek())) // 負號開頭的數值
             return make_int(root, -read_number(0));
+        // 注意，任何一個 id 都是 symbol，除非用 ' quote ，否則查不到的話，就會創建新符號
         if (isalpha(c) || strchr(symbol_chars, c)) // symbol 名稱符號
             return read_symbol(root, c);
         error("Don't know how to handle %c", c);
