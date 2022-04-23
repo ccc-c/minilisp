@@ -1,6 +1,6 @@
 # minilisp
 
-## 建置 (Linux/WSL 中)
+## 建置 (Linux/WSL)
 
 ```
 $ wsl
