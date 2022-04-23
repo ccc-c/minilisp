@@ -1,6 +1,6 @@
 # minilisp
 
-## 用法 (Linux/WSL 中)
+## 建置 (Linux/WSL 中)
 
 ```
 $ wsl
@@ -8,6 +8,11 @@ wsl> make clean
 rm -f minilisp *~
 wsl> make
 cc -std=gnu99 -g -O2 -Wall    minilisp.c   -o minilisp
+```
+
+## 交談式使用
+
+```
 wsl> ./minilisp
 (+ 2 3)
 5
