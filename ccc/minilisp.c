@@ -104,32 +104,32 @@ static Obj *Symbols;
 // Constructors
 //======================================================================
 
-static Obj *make_int(void *root, int value) {
+static Obj *make_int(void *root, int value) { // 創建整數
     Obj *r = alloc(root, TINT, sizeof(int));
     r->value = value;
     return r;
 }
 
-static Obj *cons(void *root, Obj **car, Obj **cdr) {
+static Obj *cons(void *root, Obj **car, Obj **cdr) { // 創建 cell = cons(car,cdr)
     Obj *cell = alloc(root, TCELL, sizeof(Obj *) * 2);
     cell->car = *car;
     cell->cdr = *cdr;
     return cell;
 }
 
-static Obj *make_symbol(void *root, char *name) {
+static Obj *make_symbol(void *root, char *name) { // 創建符號變數
     Obj *sym = alloc(root, TSYMBOL, strlen(name) + 1);
     strcpy(sym->name, name);
     return sym;
 }
 
-static Obj *make_primitive(void *root, Primitive *fn) {
+static Obj *make_primitive(void *root, Primitive *fn) { // 創建基本函數
     Obj *r = alloc(root, TPRIMITIVE, sizeof(Primitive *));
     r->fn = fn;
     return r;
 }
 
-static Obj *make_function(void *root, Obj **env, int type, Obj **params, Obj **body) {
+static Obj *make_function(void *root, Obj **env, int type, Obj **params, Obj **body) { // 創建函數
     assert(type == TFUNCTION || type == TMACRO);
     Obj *r = alloc(root, type, sizeof(Obj *) * 3);
     r->params = *params;
@@ -138,10 +138,10 @@ static Obj *make_function(void *root, Obj **env, int type, Obj **params, Obj **b
     return r;
 }
 
-struct Obj *make_env(void *root, Obj **vars, Obj **up) {
+struct Obj *make_env(void *root, Obj **vars, Obj **up) { // push_env 裏呼叫 make_env(root, map, env)
     Obj *r = alloc(root, TENV, sizeof(Obj *) * 2);
-    r->vars = *vars;
-    r->up = *up;
+    r->vars = *vars; // vars=map: 新函數的 frame
+    r->up = *up; // up=env: 連接到上層的 frame
     return r;
 }
 
@@ -157,7 +157,7 @@ static Obj *acons(void *root, Obj **x, Obj **y, Obj **a) {
 // Prints the given object.
 static void print(Obj *obj) { // 印出一個物件 (list)
     switch (obj->type) {
-    case TCELL:
+    case TCELL: // 遞迴印出 list
         printf("(");
         for (;;) {
             print(obj->car);
@@ -206,7 +206,7 @@ static int length(Obj *list) { // 傳回 list 長度
 
 static Obj *eval(void *root, Obj **env, Obj **obj);
 
-static void add_variable(void *root, Obj **env, Obj **sym, Obj **val) {
+static void add_variable(void *root, Obj **env, Obj **sym, Obj **val) { // 新增變數
     DEFINE2(vars, tmp);
     *vars = (*env)->vars;
     *tmp = acons(root, sym, val, vars);
@@ -226,7 +226,7 @@ static Obj *push_env(void *root, Obj **env, Obj **vars, Obj **vals) {
     }
     if (*vars != Nil)
         *map = acons(root, vars, vals, map);
-    return make_env(root, map, env);
+    return make_env(root, map, env); // 注意，map 是新函數的 frame，連接到舊的 env ??
 }
 // (progn expr ...) 其實就是 ((lambda () expr ...))，也就是無參數的函數。
 // Evaluates the list elements from head and returns the last return value.
@@ -252,14 +252,15 @@ static Obj *eval_list(void *root, Obj **env, Obj **list) { // 執行一個 list
 }
 
 static bool is_list(Obj *obj) {
-    return obj == Nil || obj->type == TCELL;
+    return obj == Nil || obj->type == TCELL; // TCELL 就是 list 的型態
 }
 
 static Obj *apply_func(void *root, Obj **env, Obj **fn, Obj **args) { // 呼叫 fn(args)
     DEFINE3(params, newenv, body);
     *params = (*fn)->params;
     *newenv = (*fn)->env;
-    *newenv = push_env(root, newenv, params, args);
+    *newenv = push_env(root, newenv, params, args); // 每個函數都會創建一個新的 frame (env),把 params 綁到 args
+    // 注意： env 是附屬於 fn 的，每個函數都有自己的 env
     *body = (*fn)->body;
     return progn(root, newenv, body); // 執行 body
 }
@@ -279,7 +280,7 @@ static Obj *apply(void *root, Obj **env, Obj **fn, Obj **args) { // 呼叫 fn(ar
 }
 
 // Searches for a variable by symbol. Returns null if not found.
-static Obj *find(Obj **env, Obj *sym) { // 查表取出符號值
+static Obj *find(Obj **env, Obj *sym) { // 查表取出符號值 (因為上層都被包進來了，所以不用檢查整個 env stack ?)
     for (Obj *p = *env; p != Nil; p = p->up) {
         for (Obj *cell = p->vars; cell != Nil; cell = cell->cdr) {
             Obj *bind = cell->car;
@@ -290,17 +291,17 @@ static Obj *find(Obj **env, Obj *sym) { // 查表取出符號值
     return NULL;
 }
 
-// Expands the given macro application form.
-static Obj *macroexpand(void *root, Obj **env, Obj **obj) { // 巨集展開
+// Expands the given macro application form. // 範例: (macroexpand (if-zero x (print x)))
+static Obj *macroexpand(void *root, Obj **env, Obj **obj) {
     if ((*obj)->type != TCELL || (*obj)->car->type != TSYMBOL)
         return *obj;
     DEFINE3(bind, macro, args);
-    *bind = find(env, (*obj)->car);
+    *bind = find(env, (*obj)->car); // 巨集名稱，例如 if-zero
     if (!*bind || (*bind)->cdr->type != TMACRO)
         return *obj;
-    *macro = (*bind)->cdr;
-    *args = (*obj)->cdr;
-    return apply_func(root, env, macro, args);
+    *macro = (*bind)->cdr; // 巨集 BODY，例如 (print x)
+    *args = (*obj)->cdr;   // 巨集參數，例如 x
+    return apply_func(root, env, macro, args); // 展開該巨集
 }
 
 // Evaluates the S expression.
@@ -346,7 +347,7 @@ static Obj *eval(void *root, Obj **env, Obj **obj) {
 static Obj *prim_quote(void *root, Obj **env, Obj **list) {
     if (length(*list) != 1)
         error("Malformed quote");
-    return (*list)->car;
+    return (*list)->car; // 傳回 expr，不 eval()
 }
 
 // (cons expr expr)
@@ -354,7 +355,7 @@ static Obj *prim_cons(void *root, Obj **env, Obj **list) {
     if (length(*list) != 2)
         error("Malformed cons");
     Obj *cell = eval_list(root, env, list);
-    cell->cdr = cell->cdr->car;
+    cell->cdr = cell->cdr->car; // 原本 (expr1 (expr1 ...)) 變成 (expr1 expr1)
     return cell;
 }
 
@@ -363,7 +364,7 @@ static Obj *prim_car(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list);
     if (args->car->type != TCELL || args->cdr != Nil)
         error("Malformed car");
-    return args->car->car;
+    return args->car->car; // 取得 cell 的頭部
 }
 
 // (cdr <cell>)
@@ -371,7 +372,7 @@ static Obj *prim_cdr(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list);
     if (args->car->type != TCELL || args->cdr != Nil)
         error("Malformed cdr");
-    return args->car->cdr;
+    return args->car->cdr; // 取得 cell 的尾部
 }
 
 // (setq <symbol> expr)
@@ -384,7 +385,7 @@ static Obj *prim_setq(void *root, Obj **env, Obj **list) {
         error("Unbound variable %s", (*list)->car->name);
     *value = (*list)->cdr->car;
     *value = eval(root, env, value);
-    (*bind)->cdr = *value;
+    (*bind)->cdr = *value; // 設定 symbol 為 expr
     return *value;
 }
 
@@ -394,7 +395,7 @@ static Obj *prim_setcar(void *root, Obj **env, Obj **list) {
     *args = eval_list(root, env, list);
     if (length(*args) != 2 || (*args)->car->type != TCELL)
         error("Malformed setcar");
-    (*args)->car->car = (*args)->cdr->car;
+    (*args)->car->car = (*args)->cdr->car; // 設定 cell 為 expr
     return (*args)->car;
 }
 
@@ -404,9 +405,9 @@ static Obj *prim_while(void *root, Obj **env, Obj **list) {
         error("Malformed while");
     DEFINE2(cond, exprs);
     *cond = (*list)->car;
-    while (eval(root, env, cond) != Nil) {
+    while (eval(root, env, cond) != Nil) { // 當 cond 成立
         *exprs = (*list)->cdr;
-        eval_list(root, env, exprs);
+        eval_list(root, env, exprs);       // 執行所有 expr
     }
     return Nil;
 }
@@ -416,7 +417,7 @@ static Obj *prim_gensym(void *root, Obj **env, Obj **list) {
   static int count = 0;
   char buf[10];
   snprintf(buf, sizeof(buf), "G__%d", count++);
-  return make_symbol(root, buf);
+  return make_symbol(root, buf); // 創建唯一符號
 }
 
 // (+ <integer> ...)
@@ -426,7 +427,7 @@ static Obj *prim_plus(void *root, Obj **env, Obj **list) {
         if (args->car->type != TINT)
             error("+ takes only numbers");
         sum += args->car->value;
-    }
+    } // int1+int2+...+intN
     return make_int(root, sum);
 }
 
@@ -439,7 +440,7 @@ static Obj *prim_minus(void *root, Obj **env, Obj **list) {
     if (args->cdr == Nil)
         return make_int(root, -args->car->value);
     int r = args->car->value;
-    for (Obj *p = args->cdr; p != Nil; p = p->cdr)
+    for (Obj *p = args->cdr; p != Nil; p = p->cdr) // int1-int2...-intN
         r -= p->car->value;
     return make_int(root, r);
 }
@@ -453,7 +454,7 @@ static Obj *prim_lt(void *root, Obj **env, Obj **list) {
     Obj *y = args->cdr->car;
     if (x->type != TINT || y->type != TINT)
         error("< takes only numbers");
-    return x->value < y->value ? True : Nil;
+    return x->value < y->value ? True : Nil; // 是否 integer1 < integer2 ?
 }
 
 static Obj *handle_function(void *root, Obj **env, Obj **list, int type) {
@@ -465,15 +466,15 @@ static Obj *handle_function(void *root, Obj **env, Obj **list, int type) {
             error("Parameter must be a symbol");
     if (p != Nil && p->type != TSYMBOL)
         error("Parameter must be a symbol");
-    DEFINE2(params, body);
-    *params = (*list)->car;
-    *body = (*list)->cdr;
-    return make_function(root, env, type, params, body);
+    DEFINE2(params, body);  // 分配兩個空間
+    *params = (*list)->car; // 1. 參數 params
+    *body = (*list)->cdr;   // 2. 程式 body
+    return make_function(root, env, type, params, body); // 建立該函數
 }
 
 // (lambda (<symbol> ...) expr ...)
 static Obj *prim_lambda(void *root, Obj **env, Obj **list) {
-    return handle_function(root, env, list, TFUNCTION);
+    return handle_function(root, env, list, TFUNCTION); // 定義函數，不記錄名稱
 }
 
 static Obj *handle_defun(void *root, Obj **env, Obj **list, int type) {
@@ -482,14 +483,14 @@ static Obj *handle_defun(void *root, Obj **env, Obj **list, int type) {
     DEFINE3(fn, sym, rest);
     *sym = (*list)->car;
     *rest = (*list)->cdr;
-    *fn = handle_function(root, env, rest, type);
-    add_variable(root, env, sym, fn);
+    *fn = handle_function(root, env, rest, type); // 創建函數
+    add_variable(root, env, sym, fn); // 其名稱為 sym
     return *fn;
 }
 
 // (defun <symbol> (<symbol> ...) expr ...) // 例如：(defun list (x . y) (cons x y))
 static Obj *prim_defun(void *root, Obj **env, Obj **list) {
-    return handle_defun(root, env, list, TFUNCTION);
+    return handle_defun(root, env, list, TFUNCTION); // 定義函數
 }
 
 // (define <symbol> expr) // 例如：(define board (make-board board-size))
@@ -500,13 +501,13 @@ static Obj *prim_define(void *root, Obj **env, Obj **list) {
     *sym = (*list)->car;
     *value = (*list)->cdr->car;
     *value = eval(root, env, value);
-    add_variable(root, env, sym, value);
+    add_variable(root, env, sym, value); // 定義 symbol 為 expr 的值
     return *value;
 }
 
 // (defmacro <symbol> (<symbol> ...) expr ...)
 static Obj *prim_defmacro(void *root, Obj **env, Obj **list) {
-    return handle_defun(root, env, list, TMACRO);
+    return handle_defun(root, env, list, TMACRO); // 定義巨集函數
 }
 
 // (macroexpand expr)
@@ -515,14 +516,14 @@ static Obj *prim_macroexpand(void *root, Obj **env, Obj **list) {
         error("Malformed macroexpand");
     DEFINE1(body);
     *body = (*list)->car;
-    return macroexpand(root, env, body);
+    return macroexpand(root, env, body); // 巨集展開
 }
 
 // (println expr)
 static Obj *prim_println(void *root, Obj **env, Obj **list) {
     DEFINE1(tmp);
     *tmp = (*list)->car;
-    print(eval(root, env, tmp));
+    print(eval(root, env, tmp)); // 印出 expr1
     printf("\n");
     return Nil;
 }
@@ -533,13 +534,13 @@ static Obj *prim_if(void *root, Obj **env, Obj **list) {
         error("Malformed if");
     DEFINE3(cond, then, els);
     *cond = (*list)->car;
-    *cond = eval(root, env, cond);
-    if (*cond != Nil) {
+    *cond = eval(root, env, cond);   // 檢查 expr1
+    if (*cond != Nil) {              // 若不是 Nil // =()=False
         *then = (*list)->cdr->car;
-        return eval(root, env, then);
+        return eval(root, env, then); // 則執行 expr2 (then)
     }
     *els = (*list)->cdr->cdr;
-    return *els == Nil ? Nil : progn(root, env, els);
+    return *els == Nil ? Nil : progn(root, env, els); // 否則執行 expr3 (else)
 }
 
 // (= <integer> <integer>)
@@ -551,7 +552,7 @@ static Obj *prim_num_eq(void *root, Obj **env, Obj **list) {
     Obj *y = values->cdr->car;
     if (x->type != TINT || y->type != TINT)
         error("= only takes numbers");
-    return x->value == y->value ? True : Nil;
+    return x->value == y->value ? True : Nil; // 檢查 integer1 == integer2 ?
 }
 
 // (eq expr expr)
@@ -559,20 +560,20 @@ static Obj *prim_eq(void *root, Obj **env, Obj **list) {
     if (length(*list) != 2)
         error("Malformed eq");
     Obj *values = eval_list(root, env, list);
-    return values->car == values->cdr->car ? True : Nil;
+    return values->car == values->cdr->car ? True : Nil; // 檢查 expr1 == expr2 ?
 }
 
 static void add_primitive(void *root, Obj **env, char *name, Primitive *fn) {
     DEFINE2(sym, prim);
     *sym = intern(root, name);
     *prim = make_primitive(root, fn);
-    add_variable(root, env, sym, prim);
+    add_variable(root, env, sym, prim); // 新增基本函數
 }
 
 static void define_constants(void *root, Obj **env) {
     DEFINE1(sym);
     *sym = intern(root, "t");
-    add_variable(root, env, sym, &True);
+    add_variable(root, env, sym, &True); // 新增常數 t (True)
 }
 
 static void define_primitives(void *root, Obj **env) {
@@ -620,9 +621,9 @@ int main(int argc, char **argv) {
     Symbols = Nil;
     void *root = NULL;
     DEFINE2(env, expr);
-    *env = make_env(root, &Nil, &Nil);
-    define_constants(root, env);
-    define_primitives(root, env);
+    *env = make_env(root, &Nil, &Nil); // 創建 root 環境
+    define_constants(root, env);  // 定義常數
+    define_primitives(root, env); // 定義基本運算
 
     // The main loop // 主迴圈
     for (;;) {
