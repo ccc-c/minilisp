@@ -69,7 +69,7 @@ typedef struct Obj {
             struct Obj *cdr;
         };
         // Symbol     // 符號名稱
-        char name[1]; // 奇怪，為何不是指標，長度只宣告 1 ??
+        char name[1]; // 奇怪，為何不用指標，長度卻只宣告 1 ??
         // 原因是 alloc() 函數會分配大小，而這是最後一個欄位，所以自然會分配足夠，不用擔心！
         // Primitive
         Primitive *fn; // 基本函數
