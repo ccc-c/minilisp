@@ -27,22 +27,22 @@ static __attribute((noreturn)) void error(char *fmt, ...) {
 // The Lisp object type
 enum {
     // Regular objects visible from the user
-    TINT = 1,
-    TCELL, // TCELL 就是 LIST 嗎 ??
-    TSYMBOL,
-    TPRIMITIVE,
-    TFUNCTION,
-    TMACRO,
-    TENV,
+    TINT = 1,  // 整數
+    TCELL,     // TCELL 就是一般的 LIST
+    TSYMBOL,   // 符號
+    TPRIMITIVE,// 基本函數
+    TFUNCTION, // 自訂函數
+    TMACRO,    // 巨集
+    TENV,      // 環境變數 frame
     // The marker that indicates the object has been moved to other location by GC. The new location
     // can be found at the forwarding pointer. Only the functions to do garbage collection set and
     // handle the object of this type. Other functions will never see the object of this type.
-    TMOVED,
+    TMOVED,    // 垃圾蒐集時標示已經被移動過了
     // Const objects. They are statically allocated and will never be managed by GC.
-    TTRUE,
-    TNIL,
-    TDOT,
-    TCPAREN,
+    TTRUE,     // TRUE
+    TNIL,      // Nil (FALSE)
+    TDOT,      // .
+    TCPAREN,   // )
 };
 
 // Typedef for the primitive function
@@ -53,39 +53,40 @@ typedef struct Obj *Primitive(void *root, struct Obj **env, struct Obj **args);
 typedef struct Obj {
     // The first word of the object represents the type of the object. Any code that handles object
     // needs to check its type first, then access the following union members.
-    int type;
+    int type; // 物件型態
 
     // The total size of the object, including "type" field, this field, the contents, and the
     // padding at the end of the object.
-    int size;
+    int size; // 物件大小
 
     // Object values.
     union {
         // Int
-        int value;
-        // Cell
+        int value; // 整數物件值
+        // Cell    // 一般 LIST
         struct {
             struct Obj *car;
             struct Obj *cdr;
         };
-        // Symbol
-        char name[1];
+        // Symbol     // 符號名稱
+        char name[1]; // 奇怪，為何不是指標，長度只宣告 1 ??
+        // 原因是 alloc() 函數會分配大小，而這是最後一個欄位，所以自然會分配足夠，不用擔心！
         // Primitive
-        Primitive *fn;
+        Primitive *fn; // 基本函數
         // Function or Macro
         struct {
-            struct Obj *params;
-            struct Obj *body;
-            struct Obj *env;
+            struct Obj *params; // 巨集參數
+            struct Obj *body;   // 巨集 body
+            struct Obj *env;    // 巨集 env 環境變數
         };
         // Environment frame. This is a linked list of association lists
         // containing the mapping from symbols to their value.
-        struct {
+        struct { // 環境變數
             struct Obj *vars;
             struct Obj *up;
         };
         // Forwarding pointer
-        void *moved;
+        void *moved; // 移動後物件的新位址
     };
 } Obj;
 
