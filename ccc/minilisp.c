@@ -233,9 +233,9 @@ static Obj *push_env(void *root, Obj **env, Obj **vars, Obj **vals) {
 // Evaluates the list elements from head and returns the last return value.
 static Obj *progn(void *root, Obj **env, Obj **list) { // 執行整個程式
     DEFINE2(lp, r);
-    for (*lp = *list; *lp != Nil; *lp = (*lp)->cdr) {
+    for (*lp = *list; *lp != Nil; *lp = (*lp)->cdr) { // 在 env 中執行整個 list
         *r = (*lp)->car;
-        *r = eval(root, env, r);
+        *r = eval(root, env, r); // 在 env 中執行 list 的一個節點
     }
     return *r;
 }
@@ -263,27 +263,27 @@ static Obj *apply_func(void *root, Obj **env, Obj **fn, Obj **args) { // 呼叫 
     *newenv = push_env(root, newenv, params, args); // 每個函數都會創建一個新的 frame (env),把 params 綁到 args
     // 注意： env 是附屬於 fn 的，每個函數都有自己的 env
     *body = (*fn)->body;
-    return progn(root, newenv, body); // 執行 body
+    return progn(root, newenv, body); // 以 newenv 為環境執行 body，這就是 closure 的實作方式
 }
 
 // Apply fn with args.
-static Obj *apply(void *root, Obj **env, Obj **fn, Obj **args) { // 呼叫 fn(args)
+static Obj *apply(void *root, Obj **env, Obj **fn, Obj **args) { // (fn (params) args) => 呼叫 fn(params=args)
     if (!is_list(*args))
         error("argument must be a list");
-    if ((*fn)->type == TPRIMITIVE)
-        return (*fn)->fn(root, env, args);
-    if ((*fn)->type == TFUNCTION) {
+    if ((*fn)->type == TPRIMITIVE) // 如果是基礎函數
+        return (*fn)->fn(root, env, args); // 呼叫對應 C 語言函數
+    if ((*fn)->type == TFUNCTION) { // 如果是自定義函數
         DEFINE1(eargs);
-        *eargs = eval_list(root, env, args);
-        return apply_func(root, env, fn, eargs);
+        *eargs = eval_list(root, env, args); // 計算展開 args 參數
+        return apply_func(root, env, fn, eargs); // 將算完的參數帶入
     }
     error("not supported");
 }
 
 // Searches for a variable by symbol. Returns null if not found.
-static Obj *find(Obj **env, Obj *sym) { // 查表取出符號值 (因為上層都被包進來了，所以不用檢查整個 env stack ?)
-    for (Obj *p = *env; p != Nil; p = p->up) {
-        for (Obj *cell = p->vars; cell != Nil; cell = cell->cdr) {
+static Obj *find(Obj **env, Obj *sym) { // 查表取出符號值
+    for (Obj *p = *env; p != Nil; p = p->up) { // 注意：這裡會一層一層往上查表 (當下層沒查到就會往上查)
+        for (Obj *cell = p->vars; cell != Nil; cell = cell->cdr) { // 查目前這層是否有該變數。
             Obj *bind = cell->car;
             if (sym == bind->car)
                 return bind;
